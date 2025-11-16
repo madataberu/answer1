@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>答えを入力してください</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; padding: 24px; line-height: 1.7; }
+  h1 { font-size: 1.3rem; margin: 0 0 12px; }
+  .row { display:flex; gap:8px; }
+  input { flex:1; padding:12px; font-size:1.1rem; border:1px solid #ddd; border-radius:10px; }
+  button { padding:12px 16px; font-size:1.05rem; border:0; border-radius:10px; background:#1a73e8; color:#fff; }
+  #msg { margin-top: 12px; color:#c62828; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+
+<h1>答えを入力してください</h1>
+
+<div id="form">
+  <div class="row">
+    <input id="answer" type="text" placeholder="例）ありがとう / アリガトウ / arigato">
+    <button id="send">送信</button>
+  </div>
+  <div id="msg"></div>
+</div>
+
+<script>
+// --- 正解定義（ここを変えれば別の答えにできます） ---
+const correctSurface = "アリガトウ";
+
+// 受け入れる表記ゆらぎ：ひらがな・カタカナ・半角カナ・ローマ字（arigato, arigatou, arigatō）
+const ACCEPT = new Set([
+  "ありがとう", "ありがと",          // ひらがな
+  "ありがとう",                     // NFKCでも稀に分解するケースの保険
+  "アリガトウ", "アリガト",          // カタカナ（長音省略も許容）
+  "ｱﾘｶﾞﾄｳ", "ｱﾘｶﾞﾄ",               // 半角カナ
+  "arigato", "arigatou", "arigatō"  // ローマ字
+]);
+
+// ----- 文字正規化ツール -----
+// 全角→半角, 合成文字の正規化
+const nfkc = s => s.normalize("NFKC");
+
+// カタカナ→ひらがな
+function kataToHira(s){
+  return s.replace(/[\u30a1-\u30f6]/g, ch =>
+    String.fromCharCode(ch.charCodeAt(0) - 0x60) // カタカナ→ひらがな
+  );
+}
+
+// 全角英数→半角（NFKCでほぼOKだが保険）
+function toAscii(s){ return s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, ch => 
+  String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
+);}
+
+// 記号・空白削除（見た目の差を吸収）
+function stripNoise(s){
+  return s.replace(/[\s\u3000・｡｡。､、!！?？~〜\-‐ー－—^＾]/g, "");
+}
+
+// ローマ字の長音（ō, ô, ȯ など）→ o / ou 許容のため o に寄せる
+function foldMacron(s){
+  return s.replace(/[ōôöō̊ȯ]/gi, "o");
+}
+
+// 総合正規化：小文字化→NFKC→半角化→長音畳み→カタ→ひら→ノイズ除去
+function normalizeLoose(s){
+  let t = s;
+  t = t.toLowerCase();
+  t = nfkc(t);
+  t = toAscii(t);
+  t = foldMacron(t);
+  t = kataToHira(t);
+  t = stripNoise(t);
+  return t;
+}
+
+// 比較用のターゲット群を前計算
+const canonTargets = new Set(
+  Array.from(ACCEPT).map(normalizeLoose)
+);
+
+// 入力チェック
+function check(raw){
+  const norm = normalizeLoose(raw);
+  if (canonTargets.has(norm)) return true;
+
+  // 直接「アリガトウ」を厳密一致させたい場合の追加（装飾文字を剥がした上での一致）
+  const exact = nfkc(raw).trim();
+  if (exact === correctSurface) return true;
+
+  return false;
+}
+
+function go(){
+  const val = document.getElementById("answer").value.trim();
+  if (check(val)) {
+    window.location.href = "clear.html";
+  } else {
+    document.getElementById("msg").textContent = "ちがうよ！もう一度考えてみてね。";
+  }
+}
+
+// クリック/Enterで送信
+document.getElementById("send").addEventListener("click", go);
+document.getElementById("answer").addEventListener("keydown", (e)=>{
+  if(e.key === "Enter") go();
+});
+
+// --- URLクエリ ?a=... が付いていたら自動判定（QR専用の自動遷移用） ---
+const a = new URLSearchParams(location.search).get("a");
+if (a && a.trim()){
+  if (check(a)) {
+    // 正解なら即遷移
+    window.location.replace("clear.html");
+  } else {
+    // 不正解ならフォーム表示＋文言
+    document.getElementById("answer").value = a;
+    document.getElementById("msg").textContent = "うーん…ちがうみたい。入力で再チャレンジ！";
+  }
+}
+</script>
+</body>
+</html>
